@@ -1,17 +1,17 @@
 (ns clojure-by-example.ex05-immutability-and-fp)
 
-
 ;; Ex05: Lesson Goals
 ;; - This section is more conceptual, than exercise-oriented.
+;;
 ;; - Set you up with some important ideas, which we will use heavily
 ;;   in the final section (and in all our Clojure programs)
 ;;   - All values are immutable by default (and we like it this way)
 ;;   - What `def` is
-;;   - Lexical scope, and why you should avoid global defs
+;;   - Why you should avoid global defs
 ;;   - What are "pure functions"?
-;;   - Convenient syntax for functions with multiple arities,
-;;     variable arities, and hash-maps or vectors as arguments.
-
+;;
+;; - Don't forget to evaluate all s-expressions that interest you,
+;;   and also feel free to write and play around with your own ones.
 
 
 
@@ -44,14 +44,17 @@ pi ; evaluate to confirm
 ;;
 ;; - We can "associate" new key-vals into an existing map
 (assoc {:a 1}
-  :b 2
-  :c 3)
+       :b 2
+       :c 3)
 ;;
 ;; - With assoc, we can also update existing key-value pairs
-(assoc {:a 1 :b 2} :b 99)
+(assoc {:a 1 :b 2}
+       :b 99)
 ;;
 ;; - And, finally, we can "dissociate" existing key-vals
-(dissoc {:a 1 :b 2 :c 3} :b :c)
+(dissoc {:a 1 :b 2 :c 3}
+        :b
+        :c)
 
 
 ;; - So suppose we define...
@@ -98,130 +101,103 @@ planets ; confirm by checking the value of this
 
 
 ;; On `def`:
+;;
+;; `def` creates a mutable reference. Technically, it is a way
+;; "to maintain a persistent reference to a changing value".
+;;
+;; Note the difference:
+;; - We can mutate the _reference_, but not the value.
+;; - Values are by definition immutable.
+;;
+;; Warning:
+;; - DO NOT use `def` to _emulate_ mutation.
 
-;; DO NOT use `def` to _emulate_ mutation like this:
+;; Firstly:
+;; - Because you'll cause errors of understanding:
 
-(def am-i-mutable? 3.141)
+(def weird-pi 3.141) ; bind weird-pi to 3.141
 
-#_(def am-i-mutable? 42)
+(def other-pi weird-pi) ; bind other-pi to the value of weird-pi,
+                        ; which at this point is 3.141
 
-#_(def am-i-mutable? "LoL, No!")
+(def weird-pi 42) ; re-bind weird-pi to some other value
 
-;; This is _not_ actually mutation.
+weird-pi ; changes to 42
+
+other-pi ; what should this be?
+
+;; See the problem?
+;; - We re-bound weird-pi to a new value, but other-pi's binding
+;;   remained constant.
+;; - Spread enough re-definitions across your program, and you'll be
+;;   in trouble; unable to reason about who's using what version
+;;   of the binding.
+
+
+;; Secondly:
+;; - It's dangerous because re-defining a var alters it globally.
+;; - Why so dangerous?
 ;;
-;; It's repeated top-level _re-definition_ of `am-i-mutable?`.
-;;
-;; At each re-definition, `am-i-mutable` effectively "becomes"
-;; the new _immutable_ value.
-;;
-;; "Mutable" value is actually an oxymoron. Recall, we said that
-;; ALL values are by definition immutable. 3.141 will always be 3.141
-;; for ever and ever, till the end of time.
-;;
-;; So, we use `def` to give globally-usable names to _values_ ---
-;; immutable things that we can easily refer to again and again,
-;; throughout our program.
-;;
-;; What's the point?
-;;
-;; Well, remember functions are values?
+;; Well, compare the following.
+;; - All three are _incorrect_, because pi is wrong.
+;; - But only the third one is actually dangerous.
+
+(defn scale-by-pi-v1
+  [n]
+  (let [pi 42]
+    (* pi n)))
+
+(defn scale-by-pi-v2
+  [n]
+  (* weird-pi n))
+
+#_(defn scale-by-pi-v3
+    [n]
+    (def pi 42)
+    (* n pi))
+
+
+;; Also, remember functions are values?
 
 (fn [x] x) ; is a value (which shall remain anonymous)
 
-
 (defn same
   [x]
-  x) ; `same` is the name of a function. Therefore `same` names a value.
+  x) ; `same` is the name of a function.
+     ; Therefore `same` names a value.
 
-
-;; So what if we...
+;; So what if we:
 (def same-same
   (fn [x] x)) ; hah!
 
-;; That is to say:
-;; - (fn [x] x) means "return the given value, unchanged", and...
-;; - It _must_ mean _exactly_ this for ever and ever,
-;;   until the end of time. It _must_ be immutable.
-;; - And oh, we also need to reuse this idea, so would you please
-;;   give it the name `same-same`?
-
-;; And actually, `defn` is just a convenience wrapper over `def`,
-;; because we can't live without defining functions, in Clojure-land.
+;; As it happens:
+;; - `defn` is really just a convenience wrapper over `def`.
+;; - Because we can't live without defining functions, in Clojure-land
 
 (macroexpand '(defn same [x] x)) ; yes, it is
 
-
-
-;; Lexical Scope, and Global Vars
-
-
-(def x 42) ; `x` is a global "var"
-
-(defn x+
-  [y]
-  (+ x 1)) ; this `x` refers to the global `x`
-
-(x+ 1) ; will return 43
-(x+ 9) ; will still return 43
-
-
-(defn x++
-  [x] ; this `x` is local to the scope of x++,
-      ; and will "shadow" the global `x`
-  (+ x 1))
-
-(x++ 1) ; will return 2
-(x++ 9) ; will return 10
-
-
-(defn x+++
-  [x] ; this `x` will shadow the global `x`
-  (let [x 10] ; but this `x` is local to the let,
-              ; and will shadow all "outer" x-es
-    (+ x 1)))
-
-(x+++ 1) ; will return 11
-(x+++ 9)  ; will still return 11
-
-
-;; Lexical scope guarantees that the reference to a value will be
-;; "enclosed" in the scope in which it is being used.
-
-;; This makes it very easy to reason about where a value originated.
-;; - Start at the place of reference of the value.
-;; - Then "walk" outwards, until you meet the very first let binding,
-;;   or arg-list, or def, where the value was bound.
-;; - Now you know where the value came from.
-
-
-;; EXERCISE:
+;; So, truthfully:
+;; - `same` and `same-same` are mutable references to immutable
+;;   function definitions.
 ;;
-;; Reason about what is happening here:
-
-(let [x 3.141]
-  ((fn [x] x)  x))
-
-
-;; How about this? What will happen here?
-
-((fn [x] x)  x)
-
-
-;; How about this?
-
-(let [x x]
-  ((fn [x] x)  x))
-
-
-;; This?
-
-((fn [x] x) (let [x x]
-              x))
-
-;; And finally, this?
-
-((let [x 3.141]
-   (fn [x] x))   x)
+;; Now:
+;; - This mutable binding is very useful during development.
+;; - It lets us interactively improve-and-rebind functions bit by bit.
+;; - Stay in "flow".
+;;
+;; But:
+;; - Imagine the horror of someone or something mutating the definition
+;;   of your functions from under you, while your program is running!
+;;
+;; Yet:
+;; - In extremely rare cases, the ability to re-define things in a
+;;   live production system can be incredibly useful. Read the
+;;   paragraph starting with "The Remote Agent software" on this page:
+;;   http://flownet.com/gat/jpl-lisp.html
+;;
+;; Still:
+;; - Don't try this in production, unless you really really really
+;;   know what your are doing.
 
 
 ;; Lesson:
@@ -280,223 +256,26 @@ planets ; confirm by checking the value of this
 ;; functions, or for other impure functions for that matter.
 
 
-
-
-;; Convenient Syntax for functions
-;;
-;; - We use these conveniences for good effect in API design.
-
-
-;; Multiple arities
-;; - When we know for sure we have to handle some known numbers
-;;   of arguments.
-
-(defn add-upto-three-nums
-  ([] 0) ; identity of addition
-  ([x] x)
-  ([x y] (+ x y))
-  ([x y z] (+ x y z)))
-
-(add-upto-three-nums)
-(add-upto-three-nums 1)
-(add-upto-three-nums 1 2)
-(add-upto-three-nums 1 2 3)
-#_(add-upto-three-nums 1 2 3 4) ; will fail
-
-
-;; Variable arity
-;; - When we don't know in advance how many arguments we
-;;   will have to handle, but we want to handle them all.
-
-(defn add-any-numbers
-  [& nums]
-  (reduce + 0 nums))
-
-(add-any-numbers)
-(add-any-numbers 1)
-(add-any-numbers 1 2)
-(add-any-numbers 1 2 3 4 5)
-
-
-;; Multiple _and_ Variable arities, combined
-;; - Guess what + actually is inside?
-;;
-(clojure.repl/source +) ; evaluate, check the REPL/LightTable console
-;;
-;; We can implement each arity as a special case, to compute results
-;; as optimally as possible.
-
-(+)
-(+ 1)
-(+ 1 2 3 4 5 6 7 8 9 0)
-
-
-
-;; "De-structuring"
-;; - For convenient access to items in collections.
-
-
-;; Suppose a function expects a two-item sequence, we can...
-
-(defn print-tuple-in-strange-ways
-  [[a b]] ; expects a two-item vector
-  (println "-----------------")
-  (println b)
-  (println a)
-  (println "abba " [a b b a])
-  (println "hash b a " {:b b :a a})
-  (println b a a b a a " black sheep"))
-
-(print-tuple-in-strange-ways [1 2])
-
-;; It's like visually matching shapes to shapes.
-;; - [1 2] ; structure 1 and 2 in a vector
-;;    | |
-;; - [a b] ; name by position, and use each named value however we wish
-;;
-;; Said another way:
-;; - When we put data into a data structure, we... structure the data.
-;; - When we follow the structure of the data structure, but
-;;   reference each item by name, and "unpack" it for use, we have
-;;   just "de-structured" the data.
-
-
-;; De-structuring works in `let` and functions:
-
-(let [[k v] [:a 42]]
-  {:a 42})
-
-((fn [[k v]] {k v})  [:a 42])
-
-
-;; We can mix-and match de-structuring, for great good.
-;; Compare:
-
-(reduce (fn [acc-map kv-pair]
-          (assoc acc-map
-                 (first kv-pair) (second kv-pair)))
-        {:a 42}
-        {:b 0 :c 7 :d 10})
-
-(reduce (fn [acc-map [k v]]
-          (assoc acc-map k v))
-        {:a 42}
-        {:b 0 :c 7 :d 10})
-
-
-;; Vectors are ordered collections, which we de-structure by _position_.
-
-;; Hash-maps are _unordered_ collections.
-;; - BUT, they are keyed by named keys.
-;; - We can exploit this "pattern" as follows:
-
-;; Compare this:
-(let [make-message (fn [planet]
-                     (str "Planet " (:pname planet) " has "
-                          (:moons planet) " moons."))]
-  (make-message
-   {:pname "Mars" :moons 2}))
-
-
-;; With this...
-(let [make-message (fn [{:keys [pname moons]}]
-                     (str "Planet " pname " has "
-                          moons " moons."))]
-  (make-message
-   {:pname "Mars" :moons 2}))
-
-
-;; And we can further...
-(let [make-message (fn [{:keys [pname moons]}]
-                     (str "Planet " pname " has "
-                          (or moons 0) " moons."))]
-  (map make-message [{:pname "Earth" :moons 1}
-                     {:pname "Mars"  :moons 2}
-                     {:pname "Moonless"}]))
-
-
-;; We can also alias the whole hash-map:
-
-(defn add-message-1
-  [{:keys [pname moons]
-    :as   planet}]  ; alias the hash-map as `planet`
-  (assoc planet
-    :message (str "Planet " pname " has "
-                  (or moons 0) " moons.")))
-
-(map add-message-1 [{:pname "Earth" :moons 1}
-                    {:pname "Mars" :moons 2}
-                    {:pname "Moonless"}])
-
-
-;; Finally, we can specify default values directly in the destructuring:
-
-(defn add-message-2
-  [{:keys [pname moons]
-    :or   {moons 0} ; use 0, if :moons is absent
-    :as   planet}]
-  (assoc planet
-    :message (str "Planet " pname " has "
-                  moons " moons.")))
-
-(map add-message-2 [{:pname "Earth" :moons 1}
-                    {:pname "Mars" :moons 2}
-                    {:pname "Moonless"}])
-
-
-;; Further, we can exploit combinations of de-structuring
-;;
-;; - Suppose we have a hash map, keyed by planet names:
-;;
-{"Earth"    {:moons 1}
- "Mars"     {:moons 2}
- "Moonless" {}}
-;;
-;; - Recall: a hash-map is like a collection of key-value pairs/tuples
-;;
-;; - Now, we can exploit vector and map de-structuring, in combination:
-;;
-
-(defn add-message-3
-  [acc-map [pname {:keys [moons]
-                   :or {moons 0}
-                   :as pdata}]]
-  (let [msg (str "Planet " pname " has " moons " moons.")]
-    (assoc acc-map
-      pname (assoc pdata :message msg))))
-
-(reduce add-message-3
-        {} ; acc-map
-        {"Earth"    {:moons 1}
-         "Mars"     {:moons 2}
-         "Moonless" {}
-         "Nomoon"   nil})
-
-
-;; There are _many_ many ways of de-structuring.
-;; - Here's a really nice post detailing it:
-;;   cf. http://blog.jayfields.com/2010/07/clojure-destructuring.html
-
-
-
 ;; RECAP:
+;;
 ;; - Clojure values are immutable by default, and we prefer it that way
 ;;
 ;; - `def` is best used only to define names for truly global values.
+;;   Use `let` to bind local values, to get all the benefits of strict
+;;   lexical scope.
 ;;
 ;; - `defn` is just a wrapper over `def`, designed specifically to
 ;;    define functions.
 ;;
-;; - We exploit lexical scope to bind values as close as possible to the
-;;   point of use in code. This greatly improves our ability to reason
-;;   about our code. And it prevents an explosion of global `def`s.
-;;
 ;; - Write pure functions as far as possible.
+
+;; 4clojure Drills: Problems you could try now.
 ;;
-;; - Conveniences like multi-arity and variable-arity functions, with
-;;   argument de-structuring, help us design better functional APIs.
+;; - #protip: Write the solutions as proper named functions in your code base,
+;;   without code-golfing or hacks. Then translate to anonymous function form
+;;   that 4clojure requires.
 ;;
-;; - We can mix-and match these facilities, for even more convenience.
-;;
-;; - Next, we will see how to "keep state at the boundary", and
-;;   keep the majority of our core logic purely functional.
+(comment
+  (map (fn [problem-no] (str "http://www.4clojure.com/problem/"
+                             problem-no))
+       [51, 77, 60, 102, 86, 115]))
